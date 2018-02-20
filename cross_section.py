@@ -472,3 +472,5 @@ main_window.mainloop()
 def _quit():
     main_window.quit()
     main_window.destroy()
+    GEH.quit_and_destroy_plot_windows()
+    
