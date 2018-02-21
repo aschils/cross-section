@@ -16,6 +16,11 @@ ELECTRON_CHARGE = 1.60217662*10**-19 #coulomb
 
 main_window = tk.Tk()
 
+#Properly close windows. If not called on window closing, error messages appear
+#when running the script on Windows 2000 OS
+def my_quit(window):
+    window.destroy()
+
 class GuiEventHandler:
 
     def __init__(self):
@@ -49,9 +54,6 @@ class GuiEventHandler:
         self.cross_section = np.array([])
         self.cross_section_error = np.array([])
 
-        #required to cleanly exit on Windows
-        self.tk_plot_windows_list = []
-
     def valid_inputs(self):
 
         print("Signal file "+self.input_file_signal
@@ -71,6 +73,11 @@ class GuiEventHandler:
         except:
             print("Invalid input file for noise.")
             return False
+
+        if self.nbr_of_events_with_noise.size != self.noise.size:
+            print("Signal and noise arrays must have same sizes (check your input files).")
+            return False
+
         #Currents I1 and I2 of beams 1 and 2 (nanoampere)
         try:
             self.I1 = float(entry_current1.get())*10**-9
@@ -136,6 +143,9 @@ class GuiEventHandler:
         except ValueError:
             print("Invalid entry error: Observation potential must be numeric.")
             return False
+        if self.V_obs_max < self.V_obs_min:
+            print("Max observation potential must be >= min observation potential.")
+            return False
         try:
             self.eff_factor = float(entry_eff_factor.get())
         except ValueError:
@@ -177,11 +187,11 @@ class GuiEventHandler:
         print("Number of events in canals:")
         print(self.nbr_of_events)
 
-        #Error from Poisson law:
+        #Error from Poisson law: sqrt(signal + 2*noise)
         abs_error_nbr_of_events_by_s = np.sqrt(self.nbr_of_events_with_noise
         +self.noise)/self.delta_T
 
-        canal_idx = np.arange(0,len(self.nbr_of_events))
+        canal_idx = np.arange(0,self.nbr_of_events.size)
         nbr_of_canals = len(canal_idx)
 
         print("Number of canals: "+str(nbr_of_canals))
@@ -210,7 +220,7 @@ class GuiEventHandler:
 
         max_nbr_of_events_idx = np.argmax(self.nbr_of_events)
         vobspeak = self.V_obs[max_nbr_of_events_idx]
-        if max_nbr_of_events_idx > 0 and max_nbr_of_events_idx < (len(self.V_obs)-1):
+        if max_nbr_of_events_idx > 0 and max_nbr_of_events_idx < (self.V_obs.size-1):
             #Correct energies: interpolation with parabola to find "true"
             #observation potential corresponding to max number of events
             x1 = self.V_obs[max_nbr_of_events_idx-1]
@@ -229,6 +239,11 @@ class GuiEventHandler:
         E1 = E1+de
         E2 = E2-de
 
+        print("Energies beam 1 corrected (eV)")
+        print(E1)
+        print("Energies beam 2 corrected (eV)")
+        print(E2)
+
         all_pos_energies = len(E1[E1 < 0]) == 0 and len(E2[E2 < 0]) == 0
         if not all_pos_energies:
             print("Error: negative energies forbidden.")
@@ -242,6 +257,11 @@ class GuiEventHandler:
         #E_cin = mv^2/2
         v1 = np.sqrt(2*E1_joule/m1_kg)*100.0 #cm/s
         v2 = np.sqrt(2*E2_joule/m2_kg)*100.0 #cm/s
+
+        print("Speed beam 1 (cm/s)")
+        print(v1)
+        print("Speed beam 2 (cm/s)")
+        print(v2)
 
         reduced_mass = self.m1*self.m2/(self.m1+self.m2)
         self.E_rel = reduced_mass*(E1/self.m1 + E2/self.m2 - 2*np.sqrt(E1*E2/(self.m1*self.m2)))
@@ -264,6 +284,8 @@ class GuiEventHandler:
         nbr_of_events_by_s = np.delete(nbr_of_events_by_s, self.v_rel_zeros_idx)
         v1 = np.delete(v1, self.v_rel_zeros_idx)
         v2 = np.delete(v2, self.v_rel_zeros_idx)
+        abs_error_nbr_of_events_by_s = np.delete(abs_error_nbr_of_events_by_s,
+        self.v_rel_zeros_idx)
 
         #!Points of infinite cross section not included in self.cross_section!
         #!Must be added afterwards in the draw plot methods!
@@ -285,7 +307,8 @@ class GuiEventHandler:
 
     def create_plot_window(self, plot_fig):
         plt_window = tk.Tk()
-        self.tk_plot_windows_list.append(plt_window)
+        plt_window.protocol("WM_DELETE_WINDOW",
+        lambda window=plt_window: my_quit(window))
         canvas = FigureCanvasTkAgg(plot_fig, master = plt_window)
         plot_widget = canvas.get_tk_widget()
         plot_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
@@ -293,6 +316,7 @@ class GuiEventHandler:
         toolbar.update()
         canvas._tkcanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
         plot_fig.canvas.draw()
+        return plt_window
 
     def draw_plots(self):
 
@@ -312,32 +336,36 @@ class GuiEventHandler:
         plt.errorbar(V_obs_x, self.cross_section, yerr=self.cross_section_error,
         color="red")
 
-        plt.semilogy(V_obs_x, self.cross_section, "-4", color="blue")
+        if V_obs_x.size > 0:
+            plt.semilogy(V_obs_x, self.cross_section, "-4", color="blue")
 
         plt.xlabel("Observation potential [V]")
         plt.ylabel("Cross section [cm^2]")
 
         #Draw vertical red line at infinite cross section points
         for idx in self.v_rel_zeros_idx:
-            if idx <= max_nbr_of_events_idx:
-                V_obs_i = self.V_obs_min+self.delta_V_obs*idx
-                plt.axvline(V_obs_i, color="red")
+            #if idx <= max_nbr_of_events_idx:
+            V_obs_i = self.V_obs_min+self.delta_V_obs*idx
+            plt.axvline(V_obs_i, color="red")
 
         self.create_plot_window(plot_fig_Vobs_cross_sec)
+        #self.window_plot1 = self.create_plot_window(plot_fig_Vobs_cross_sec)
+        #self.window_plot1.protocol("wM_DELETE_WINDOW", self.quit_plot1)
+
 
         #After max value in nbr_of_events, data are non physical, remove them
         max_nbr_of_events_idx = np.argmax(self.nbr_of_events)
-        idx_after_max = np.arange(max_nbr_of_events_idx,len(self.nbr_of_events))
-        #V_obs_x = np.delete(self.V_obs, idx_after_max)
+        idx_after_max = np.arange(max_nbr_of_events_idx,self.nbr_of_events.size)
         E_rel_x = np.delete(self.E_rel, idx_after_max)
 
-        #For the cross section array, idx may already been removed due to
-        #0 Velocity. First remove from idx to remove already removed idx.
+        #For the cross section array, elements may already been removed due to
+        #0 velocity. First remove from elements to remove already removed
+        #elements.
         idx_to_remove_from_cross_sec = np.delete(idx_after_max,
         np.intersect1d(idx_after_max, self.v_rel_zeros_idx))
         #Then you need to shift remaining idx due to already removed elements
         idx_to_remove_from_cross_sec = idx_to_remove_from_cross_sec
-        -len(self.v_rel_zeros_idx)
+        -self.v_rel_zeros_idx.size
 
         cross_section = np.delete(self.cross_section, idx_to_remove_from_cross_sec)
         cross_section_error = np.delete(self.cross_section_error,
@@ -347,7 +375,8 @@ class GuiEventHandler:
         E_rel_x = np.delete(E_rel_x, self.v_rel_zeros_idx)
         plt.errorbar(E_rel_x , cross_section, yerr=cross_section_error,
         color="red")
-        plt.loglog(E_rel_x , cross_section, "-4", color="blue")
+        if E_rel_x.size > 0:
+            plt.loglog(E_rel_x , cross_section, "-4", color="blue")
         plt.xlabel("Relative energy [eV]")
         plt.ylabel("Cross section [cm^2]")
 
@@ -359,24 +388,17 @@ class GuiEventHandler:
 
         self.create_plot_window(plot_fig_rel_energy_cross_sec)
 
-        #temp = self.new_plot_fig()
-        #plt.plot(E_rel_x, cross_section_error)
-        #self.create_plot_window(temp)
-
-
     def browse_sig_file(self):
-        self.input_file_signal = tkFileDialog.askopenfilename(initialdir = "~",
+        selected_file_signal = tkFileDialog.askopenfilename(initialdir = "~",
         title = "select signal file")
+        if selected_file_signal != "":
+            self.input_file_signal = selected_file_signal
 
     def browse_noise_file(self):
-        self.input_file_noise = tkFileDialog.askopenfilename(initialdir = "~",
+        selected_file_noise = tkFileDialog.askopenfilename(initialdir = "~",
         title = "select noise file")
-
-    def quit_and_destroy_plot_windows():
-        for window in self.tk_plot_windows_list:
-            window.quit()
-            window.destroy()
-
+        if selected_file_noise != "":
+            self.input_file_noise = selected_file_noise
 
 GEH = GuiEventHandler()
 
@@ -464,13 +486,5 @@ entry_acquisition_time.grid(row=7,column=4)
 button_go = tk.Button(main_window, text="Draw plots", command = GEH.draw_plots)
 button_go.grid(row=14,column=2)
 
+main_window.protocol("WM_DELETE_WINDOW", lambda window=main_window: my_quit(window))
 main_window.mainloop()
-
-#Check if nessary (appears to be required on windows) to avoid
-#"Fatal Python Error: PyEval_RestoreThread: NULL tstate"
-#May be required on plot Tkinter figures too
-def _quit():
-    main_window.quit()
-    main_window.destroy()
-    GEH.quit_and_destroy_plot_windows()
-    
