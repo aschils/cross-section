@@ -54,6 +54,8 @@ class GuiEventHandler:
         self.cross_section = np.array([])
         self.cross_section_error = np.array([])
 
+        self.at_least_one_computation_done = False
+
     def valid_inputs(self):
 
         print("Signal file "+self.input_file_signal
@@ -300,6 +302,8 @@ class GuiEventHandler:
         print("Error on cross sections (cm^2):")
         print(self.cross_section_error)
 
+        self.at_least_one_computation_done = True
+
     def new_plot_fig(self):
         plot_fig = plt.figure(self.fig_id)
         self.fig_id = self.fig_id+1
@@ -400,6 +404,53 @@ class GuiEventHandler:
         if selected_file_noise != "":
             self.input_file_noise = selected_file_noise
 
+    def write_to_file(self):
+
+        if not self.at_least_one_computation_done:
+            print("You must launch a computation before writing to file.")
+            return
+
+        try:
+            out_file = tkFileDialog.asksaveasfile(initialdir = "~",
+            title = "select output file", defaultextension=".txt")
+        except:
+            print("Unable to write to file.")
+            return
+
+        if out_file is None: #happens if dialog closed with "cancel"
+            return
+
+        # Vobs relative_energy nbr_of_events cross_section error_on_cross_section
+        column_spacer = "    "
+        out_file.write("Observation_potential_[V]"+column_spacer+
+        "Relative_energy_[eV]"+column_spacer+"Number_of_events"+column_spacer+
+        "Cross_section[cm^2]"+column_spacer+"Error_on_cross_section[cm^2]\n")
+
+        nbr_of_0_v_rel_encountered = 0
+
+        for i in range(0, self.V_obs.size):
+            line = str(self.V_obs[i])+column_spacer+str(self.E_rel[i])
+            line = line+column_spacer+str(self.nbr_of_events[i])+column_spacer
+
+            if i in self.v_rel_zeros_idx:
+                #then element for this observation potential has been removed
+                #from cross section (infinite value...) and cross section error
+                line = line+"infinity"+column_spacer+"NA"
+                nbr_of_0_v_rel_encountered = nbr_of_0_v_rel_encountered+1
+            else:
+                corrected_idx = i-nbr_of_0_v_rel_encountered
+                line = line+str(self.cross_section[corrected_idx])+column_spacer
+                line = line+str(self.cross_section_error[corrected_idx])
+            line = line+"\n"
+            out_file.write(line)
+
+        try:
+            out_file.close()
+        except:
+            print("Unable to close file "+out_file)
+            return
+        print("Output file writed and closed.")
+
 GEH = GuiEventHandler()
 
 if len(sys.argv) == 3:
@@ -483,8 +534,18 @@ label_acquisition_time.grid(row=7,column=3)
 entry_acquisition_time = tk.Entry(main_window, bd =5)
 entry_acquisition_time.grid(row=7,column=4)
 
-button_go = tk.Button(main_window, text="Draw plots", command = GEH.draw_plots)
+def go_button():
+    global GEH
+    GEH.draw_plots()
+    global button_write_to_file
+    button_write_to_file.config(state="normal")
+
+button_go = tk.Button(main_window, text="Draw plots", command = go_button)
 button_go.grid(row=14,column=2)
+
+button_write_to_file = tk.Button(main_window, text="Write to file",
+command=GEH.write_to_file, state="disabled")
+button_write_to_file.grid(row=14,column=3)
 
 main_window.protocol("WM_DELETE_WINDOW", lambda window=main_window: my_quit(window))
 main_window.mainloop()
