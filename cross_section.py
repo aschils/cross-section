@@ -16,11 +16,6 @@ ELECTRON_CHARGE = 1.60217662*10**-19 #coulomb
 
 main_window = tk.Tk()
 
-#Properly close windows. If not called on window closing, error messages appear
-#when running the script on Windows 2000 OS
-def my_quit(window):
-    window.destroy()
-
 class GuiEventHandler:
 
     def __init__(self):
@@ -55,6 +50,16 @@ class GuiEventHandler:
         self.cross_section_error = np.array([])
 
         self.at_least_one_computation_done = False
+        self.nbr_plot_windows = 0
+
+    def get_nbr_plot_windows(self):
+        return self.nbr_plot_windows
+        
+    #Properly close windows. If not called on window closing, error messages appear
+    #when running the script on Windows 2000 OS
+    def my_quit(self, window):
+        window.destroy()
+        self.nbr_plot_windows = self.nbr_plot_windows-1
 
     def valid_inputs(self):
 
@@ -312,7 +317,7 @@ class GuiEventHandler:
     def create_plot_window(self, plot_fig):
         plt_window = tk.Tk()
         plt_window.protocol("WM_DELETE_WINDOW",
-        lambda window=plt_window: my_quit(window))
+        lambda window=plt_window: self.my_quit(window))
         canvas = FigureCanvasTkAgg(plot_fig, master = plt_window)
         plot_widget = canvas.get_tk_widget()
         plot_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
@@ -320,6 +325,7 @@ class GuiEventHandler:
         toolbar.update()
         canvas._tkcanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
         plot_fig.canvas.draw()
+        self.nbr_plot_windows = self.nbr_plot_windows+1
         return plt_window
 
     def draw_plots(self):
@@ -547,5 +553,14 @@ button_write_to_file = tk.Button(main_window, text="Write to file",
 command=GEH.write_to_file, state="disabled")
 button_write_to_file.grid(row=14,column=3)
 
-main_window.protocol("WM_DELETE_WINDOW", lambda window=main_window: my_quit(window))
+def main_quit():
+    global GEH
+    if GEH.get_nbr_plot_windows() > 0:
+        print("Close all plot windows first.")
+        return
+    main_window.destroy()
+    sys.exit()
+
+#main_window.protocol("WM_DELETE_WINDOW", lambda window=main_window: my_quit(window))
+main_window.protocol("WM_DELETE_WINDOW", main_quit)
 main_window.mainloop()
