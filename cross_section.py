@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import sys
 import Tkinter as tk
 import tkFileDialog
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
 AMU_TO_KG_FACTOR = 1.660539*10**-27
 ELECTRON_CHARGE = 1.60217662*10**-19 #coulomb
@@ -321,7 +321,7 @@ class GuiEventHandler:
         canvas = FigureCanvasTkAgg(plot_fig, master = plt_window)
         plot_widget = canvas.get_tk_widget()
         plot_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
-        toolbar = NavigationToolbar2TkAgg(canvas, plt_window)
+        toolbar = NavigationToolbar2Tk(canvas, plt_window)
         toolbar.update()
         canvas._tkcanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
         plot_fig.canvas.draw()
@@ -344,7 +344,7 @@ class GuiEventHandler:
         plot_fig_Vobs_cross_sec = self.new_plot_fig()
         V_obs_x = np.delete(self.V_obs, self.v_rel_zeros_idx)
         plt.errorbar(V_obs_x, self.cross_section, yerr=self.cross_section_error,
-        color="red")
+        ecolor="red")
 
         if V_obs_x.size > 0:
             plt.semilogy(V_obs_x, self.cross_section, "-4", color="blue")
@@ -383,8 +383,8 @@ class GuiEventHandler:
 
         plot_fig_rel_energy_cross_sec = self.new_plot_fig()
         E_rel_x = np.delete(E_rel_x, self.v_rel_zeros_idx)
-        plt.errorbar(E_rel_x , cross_section, yerr=cross_section_error,
-        color="red")
+        plt.errorbar(E_rel_x , cross_section, yerr=cross_section_error, xerr=None,
+        ecolor="red")
         if E_rel_x.size > 0:
             plt.loglog(E_rel_x , cross_section, "-4", color="blue")
         plt.xlabel("Relative energy [eV]")
